@@ -17,15 +17,15 @@ This crate leverages two Solana syscalls—`big_mod_exp` (for Fermat's Little Th
 
 Unlike the Ethereum implementation that applies a Keccak-256 hash and truncates the recovered point into an address, Solana's implementation of `ecrecover` returns an uncompressed public key point. Therefore, the mathematical formula for `ecrecover` on Solana can be defined as:
 
-\[ Q = r^{-1}(sR - zG) \]
+$Q = r^{-1}(s \cdot R - z \cdot G)$
 
 where:
 
-- \( Q \) is the recovered point.
-- \( r \) is the nonce.
-- \( R \) is a point with the \( x \)-coordinate of \( r \) and the \( y \)-coordinate defined by the recovery ID \( v \).
-- \( z \) is the hash scalar.
-- \( G \) is the generator point.
+- `Q` is the recovered point.
+- `r` is the nonce.
+- `R` is a point with the x-coordinate of `r` and the y-coordinate defined by the recovery ID `v`.
+- `z` is the hash scalar of the message we are "signing" 🙃️️️️️️.
+- `G` is the generator point.
 
 The input parameters we can control are \( z \), \( v \), \( r \), and \( s \).
 
@@ -35,17 +35,17 @@ By leveraging this, we can utilize `ecrecover` to perform a variety of cryptogra
 
 To perform ECMul, we zero out the right-hand side of the equation by setting the hash scalar \( z = 0 \). This simplifies the formula to:
 
-\[ Q = r^{-1}(sR) \]
+$Q = r^{-1}(s \cdot R)$
 
 If we set \( s = k \cdot r \), we can eliminate the modular inverse, reducing the formula to:
 
-\[ Q = kR \]
+$Q = k \cdot R$
 
 ##### Scalar Tweaking
 
 We can expand upon the ECMul example by utilizing the right-hand side of the equation, \( -zG \). This term represents a `MulG` operation, generating a public key point from a scalar value. By negating the input scalar and multiplying by \( r \) to cancel out the modular inverse, we reduce the formula to:
 
-\[ Q = sR + zG \]
+$Q = s \cdot R + z \cdot G$
 
 This enables an efficient implementation of tweaked public keys.
 
