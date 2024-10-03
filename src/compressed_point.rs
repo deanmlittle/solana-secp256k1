@@ -1,10 +1,13 @@
+use dashu::integer::UBig;
+use solana_nostd_secp256k1_recover::secp256k1_recover;
+
 use crate::*;
-use std::fmt::{Debug, Formatter};
+use core::{fmt::{Debug, Formatter}, ops::{Add, Mul}};
 
 pub const SEC1_OCTET_COMPRESSED_EVEN: u8 = 0x02;
 pub const SEC1_OCTET_COMPRESSED_ODD: u8 = 0x03;
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub struct CompressedPoint(pub [u8; Self::SIZE]);
 
 impl Secp256k1Point for CompressedPoint {
@@ -48,6 +51,66 @@ impl Secp256k1Point for CompressedPoint {
 
     fn invert(&mut self) {
         self.0[0] = self.is_even() as u8 + 2;
+    }
+    
+    fn compress(&self) -> CompressedPoint {
+        *self
+    }
+    
+    fn decompress(&self) -> UncompressedPoint {
+        let mut p = UncompressedPoint::lift_x_unchecked(&self.x());
+        if self.is_even() != p.is_even() {
+            p.invert();
+        }
+        p
+    }
+
+    fn tweak(&self, tweak: [u8; 32]) -> Result<Self, Secp256k1Error> {
+        // Compute z = (-r * k) mod N
+        let z_scalar = ((UBig::from_be_bytes(&Curve::negate_n(&self.x())) * UBig::from_be_bytes(&tweak)) % UBig::from_be_bytes(&Curve::N)).to_be_bytes();
+               
+        // Ensure z and s are 32 bytes
+        let mut z = [0u8; 32];
+        z[32 - z_scalar.len()..].copy_from_slice(&z_scalar);
+
+        let s: [u8; 64] = [
+            self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5], self.0[6], self.0[7],
+            self.0[8], self.0[9], self.0[10], self.0[11], self.0[12], self.0[13], self.0[14], self.0[15],
+            self.0[16], self.0[17], self.0[18], self.0[19], self.0[20], self.0[21], self.0[22], self.0[23],
+            self.0[24], self.0[25], self.0[26], self.0[27], self.0[28], self.0[29], self.0[30], self.0[31],
+            self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5], self.0[6], self.0[7],
+            self.0[8], self.0[9], self.0[10], self.0[11], self.0[12], self.0[13], self.0[14], self.0[15],
+            self.0[16], self.0[17], self.0[18], self.0[19], self.0[20], self.0[21], self.0[22], self.0[23],
+            self.0[24], self.0[25], self.0[26], self.0[27], self.0[28], self.0[29], self.0[30], self.0[31],
+        ];
+
+        // Use ecrecover with negated z to perform ECAdd
+        Ok(UncompressedPoint(secp256k1_recover(&z, self.is_odd(), &s)?).into())
+    }
+}
+
+impl Mul<&[u8;32]> for CompressedPoint {
+    type Output = Result<UncompressedPoint, Secp256k1Error>;
+
+    fn mul(self, k: &[u8;32]) -> Self::Output {
+        Curve::ecmul(&self, k)
+    }
+}
+
+impl Add<UncompressedPoint> for CompressedPoint {
+    type Output = UncompressedPoint;
+
+    fn add(self, point: UncompressedPoint) -> Self::Output {
+        point.add(self)
+    }
+}
+
+impl Add for CompressedPoint {
+    type Output = UncompressedPoint;
+
+    fn add(self, point: Self) -> Self::Output {
+        let p = point.decompress();
+        p.add(point)
     }
 }
 

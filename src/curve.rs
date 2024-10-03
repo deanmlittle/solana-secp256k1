@@ -1,5 +1,6 @@
 use dashu::integer::UBig;
-use solana_program::{big_mod_exp::big_mod_exp, secp256k1_recover::secp256k1_recover};
+use solana_nostd_secp256k1_recover::secp256k1_recover;
+use solana_program::big_mod_exp::big_mod_exp;
 
 use crate::*;
 pub struct Curve;
@@ -96,6 +97,28 @@ impl Curve {
         0xFB, 0x10, 0xD4, 0xB8,
     ]);
 
+    /// ### Add Mod Point 𝑁
+    /// 
+    /// Adds two scalars modulus curve order N.
+    pub fn add_mod_n(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
+        // Convert the input &[u8; 32] to BigUint
+        let a_int = UBig::from_be_bytes(a);
+        let b_int = UBig::from_be_bytes(b);
+        let n_int = UBig::from_be_bytes(&Self::N);
+    
+        // Perform the modular addition
+        let res_int = (a_int + b_int) % n_int;
+        let res_bytes = res_int.to_be_bytes();
+    
+        // Prepare a fixed 32-byte array for the result
+        let mut result = [0u8; 32];
+    
+        // Copy the bytes from res_bytes into result, ensuring correct size
+        let len = res_bytes.len();
+        result[32 - len..].copy_from_slice(&res_bytes);
+        result
+    }    
+
     /// ### Mul Mod Point 𝑁
     /// 
     /// Multiplies a scalar by another scalar modulus curve order N. Typically used to create
@@ -106,43 +129,68 @@ impl Curve {
         let b_int = UBig::from_be_bytes(b);
         let n_int = UBig::from_be_bytes(&Self::N);
 
-        // Perform the multiplication and modulus operation
-        let result = (a_int * b_int) % n_int;
-
-        let mut output = [0u8; 32];
-        let result_bytes = result.to_be_bytes();
-        let start = 32 - result_bytes.len();
-        output[start..].copy_from_slice(&result_bytes);
-
-        output
+        // Perform the modular addition
+        let res_int = (a_int * b_int) % n_int;
+        let res_bytes = res_int.to_be_bytes();
+    
+        // Prepare a fixed 32-byte array for the result
+        let mut result = [0u8; 32];
+    
+        // Copy the bytes from res_bytes into result, ensuring correct size
+        let len = res_bytes.len();
+        result[32 - len..].copy_from_slice(&res_bytes);
+        result
     }
 
-    /// ### Mul Mod Point 𝑁
+    /// ### Add Mod Point 𝑃
     /// 
-    /// Multiplies a scalar by another scalar modulus curve order N. Typically used to create
-    /// a normalized nonce/private key scalar.
+    /// Adds two scalars modulus prime order 𝑃.
+    pub fn add_mod_p(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
+        // Convert the input &[u8; 32] to BigUint
+        let a_int = UBig::from_be_bytes(a);
+        let b_int = UBig::from_be_bytes(b);
+        let p_int = UBig::from_be_bytes(&Self::P);
+    
+        // Perform the modular addition
+        let res_int = (a_int + b_int) % p_int;
+        let res_bytes = res_int.to_be_bytes();
+    
+        // Prepare a fixed 32-byte array for the result
+        let mut result = [0u8; 32];
+    
+        // Copy the bytes from res_bytes into result, ensuring correct size
+        let len = res_bytes.len();
+        result[32 - len..].copy_from_slice(&res_bytes);
+        result
+    }    
+
+    /// ### Mul Mod Point 𝑃
+    /// 
+    /// Multiplies a scalar by another scalar modulus prime order 𝑃.
     pub fn mul_mod_p(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
         // Convert the input &[u8; 32] to Integer
         let a_int = UBig::from_be_bytes(a);
         let b_int = UBig::from_be_bytes(b);
-        let n_int = UBig::from_be_bytes(&Self::P);
+        let p_int = UBig::from_be_bytes(&Self::P);
 
-        // Perform the multiplication and modulus operation
-        let result = (a_int * b_int) % n_int;
-
-        let mut output = [0u8; 32];
-        let result_bytes = result.to_be_bytes();
-        let start = 32 - result_bytes.len();
-        output[start..].copy_from_slice(&result_bytes);
-
-        output
+        // Perform the modular addition
+        let res_int = (a_int * b_int) % p_int;
+        let res_bytes = res_int.to_be_bytes();
+    
+        // Prepare a fixed 32-byte array for the result
+        let mut result = [0u8; 32];
+    
+        // Copy the bytes from res_bytes into result, ensuring correct size
+        let len = res_bytes.len();
+        result[32 - len..].copy_from_slice(&res_bytes);
+        result
     }
 
-    /// # Fast Mod P
+    /// # Fast Mod 𝑃
     /// 
     /// Taking advantage of the fact that:
     /// - This function is only used with 256-bit numbers
-    /// - We will almost never need to mod P as P is very large
+    /// - We will almost never need to mod 𝑃 as 𝑃 is very large
     /// - In the case that we do, we only need to handle the last 8 bytes.
     /// 
     /// We can optimize this beyond 
@@ -163,11 +211,11 @@ impl Curve {
         }
     }
 
-    /// # Fast Mod N
+    /// # Fast Mod 𝑁
     /// 
     /// Taking advantage of the fact that:
     /// - This function is only used with 256-bit numbers
-    /// - We will almost never need to mod N as N is very large
+    /// - We will almost never need to mod 𝑁 as 𝑁 is very large
     /// - In the case that we do, we only need to handle the last 33 bytes.
     /// 
     /// While this may not necessarily be faster in all cases, it will be faster 
@@ -213,8 +261,14 @@ impl Curve {
     /// # Example
     ///
     /// ```rust
-    /// let mut k: [u8; 32] = [0x01, 0x00, 0x00, ... ]; // Some 32-byte scalar value
-    /// negate(&mut k);
+    /// use solana_secp256k1::Curve;
+    /// let mut k: [u8; 32] = [
+    ///     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    ///     0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+    ///     0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+    ///     0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20
+    /// ]; // Some 32-byte scalar value
+    /// Curve::negate_n(&mut k);
     /// // `k` now contains the value (𝑁 - original_k) modulo 𝑁.
     /// ```
     /// 
@@ -268,8 +322,15 @@ impl Curve {
     /// # Example
     ///
     /// ```rust
-    /// let k: [u8; 32] = [0x02, 0x00, 0x00, ... ]; // Some 32-byte scalar value
-    /// let inv_k = mod_inv_n(k);
+    /// use solana_secp256k1::Curve;
+    /// 
+    /// let k: [u8; 32] = [
+    ///     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    ///     0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+    ///     0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+    ///     0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20
+    /// ]; // Some 32-byte scalar value
+    /// let inv_k = Curve::mod_inv_n(&k);
     /// // `inv_k` now contains the value of (𝒌⁻¹) modulo 𝑁.
     /// ```
     pub fn mod_inv_n(k: &[u8]) -> [u8; 32] {
@@ -290,8 +351,16 @@ impl Curve {
     /// # Example
     ///
     /// ```rust
-    /// let k: [u8; 32] = [0x02, 0x00, 0x00, ... ]; // Some 32-byte scalar value
-    /// let inv_k = mod_inv_p(k);
+    /// use solana_secp256k1::Curve;
+    /// 
+    /// let k: [u8; 32] = [
+    ///     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    ///     0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+    ///     0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+    ///     0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20
+    /// ]; // Some 32-byte scalar value
+    /// 
+    /// let inv_k = Curve::mod_inv_p(&k);
     /// // `inv_k` now contains the value of (𝒌⁻¹) modulo 𝑃.
     /// ```
     pub fn mod_inv_p(k: &[u8]) -> [u8; 32] {
@@ -307,15 +376,22 @@ impl Curve {
     /// # Example
     ///
     /// ```rust
-    /// let k: [u8; 32] = [0x01, 0x02, 0x03, ... ]; // Some 32-byte scalar value
-    /// let p = mul_g(k);
+    /// use solana_secp256k1::Curve;
+    /// 
+    /// let k: [u8; 32] = [
+    ///     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    ///     0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+    ///     0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+    ///     0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20
+    /// ]; // Some 32-byte scalar value
+    /// let p = Curve::mul_g(&k);
     /// ```
     pub fn mul_g(k: &[u8;32]) -> Result<UncompressedPoint, Secp256k1Error> {
         let result = Self::mul_mod_n(&k, &Self::G.x());
         let mut s = [0u8;64];
         s[..32].clone_from_slice(&Self::G.x());
         s[32..].clone_from_slice(&result);
-        Ok(UncompressedPoint(secp256k1_recover(&[0u8; 32], 0, &s)?.0))
+        Ok(UncompressedPoint(secp256k1_recover(&[0u8; 32], false, &s)?))
     }
 
     /// ### Ecmul
@@ -330,15 +406,30 @@ impl Curve {
     /// # Example
     ///
     /// ```rust
-    /// let k: [u8; 32] = [0x01, 0x02, 0x03, ... ]; // Some 32-byte scalar value
-    /// let point: CompressedPoint = [0x03, 0xf8, 0x9b, ... ]; // A compressed or uncompressed point
-    /// let p = ecmul::<CompressedPoint>(point, k);
+    /// use solana_secp256k1::{Curve, CompressedPoint};
+    /// 
+    /// let k: [u8; 32] = [
+    ///     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    ///     0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+    ///     0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+    ///     0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20
+    /// ]; // Some 32-byte scalar value
+    /// let point = CompressedPoint([
+    ///     0x03, 0x40, 0xa7, 0xc9, 0xe2, 0x07, 0x2a, 0xe2, 
+    ///     0x5c, 0x1b, 0x79, 0xca, 0x79, 0xe9, 0x56, 0x57, 
+    ///     0x61, 0xc4, 0xa6, 0xe8, 0xd3, 0x0a, 0xc2, 0x5b, 
+    ///     0x15, 0x41, 0xe0, 0x2e, 0xbb, 0x8d, 0xd2, 0x31, 
+    ///     0xdf,
+    /// ]); 
+    /// // A compressed or uncompressed point
+    /// let p = Curve::ecmul::<CompressedPoint>(&point, &k);
     /// ```
+    
     pub fn ecmul<T: Secp256k1Point>(point: &T, k: &[u8;32]) -> Result<UncompressedPoint, Secp256k1Error> {
         let result = Self::mul_mod_n(&point.x(), k);
         let mut s = [0u8;64];
         s[..32].clone_from_slice(&point.x());
         s[32..].clone_from_slice(&result);
-        Ok(UncompressedPoint(secp256k1_recover(&[0u8; 32], point.is_odd() as u8, &s)?.0))
+        Ok(UncompressedPoint(secp256k1_recover(&[0u8; 32], point.is_odd(), &s)?))
     }
 }

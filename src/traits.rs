@@ -15,7 +15,7 @@ use crate::*;
 ///
 /// By using the precomputed r value of k=1, also known as the generator point G of the curve, and that and R.Y will always be even, we can create a valid ecdsa signature onchain, enabling us to use ecrecover to efficiently recover what its public key would have been. This allows us to generate uncompressed points from scalars onchain at a discount of ~4 million CUs compared to a naive implementation.
 pub trait Secp256k1Point:
-    TryFrom<[u8; 32]> + From<[u8; 65]> + Clone + PartialEq + Eq
+    TryFrom<[u8; 32]> + From<[u8; 65]> + Clone + PartialEq + Eq + Copy
 {
     /// ### Size
     /// 
@@ -56,4 +56,16 @@ pub trait Secp256k1Point:
     /// 
     /// Inverts the parity of the 𝑌-coordinate of a point.
     fn invert(&mut self);  
+
+    /// ### Compress
+    /// 
+    /// Compress a point into a CompressedPoint
+    fn compress(&self) -> CompressedPoint;
+
+    /// ### Invert
+    /// 
+    /// Decompress a point into an UncompressedPoint
+    fn decompress(&self) -> UncompressedPoint;
+
+    fn tweak(&self, tweak: [u8; 32]) -> Result<Self, Secp256k1Error>;
 }

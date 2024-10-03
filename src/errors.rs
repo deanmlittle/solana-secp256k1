@@ -1,5 +1,4 @@
-use solana_program::secp256k1_recover::Secp256k1RecoverError;
-// use solana_program::secp256k1_recover::Secp256k1RecoverError;
+use solana_nostd_secp256k1_recover::Secp256k1RecoverError;
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
