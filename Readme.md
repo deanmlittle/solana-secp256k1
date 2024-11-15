@@ -1,6 +1,6 @@
 # Solana Secp256k1
 
-This crate leverages two Solana syscalls—`big_mod_exp` (for Fermat's Little Theorem) and `secp256k1_recover`—to create compute unit (CU)-efficient implementations of all the mathematical functions required to utilize the Secp256k1 curve for arbitrary on-chain cryptographic operations. Most notably, scalar tweaking and elliptic curve (EC) multiplication now cost just 25,000 CUs, a 200x reduction from their initial ~5,000,000 CU cost. This library supports highly performant versions of:
+This crate leverages `secp256k1_recover` to create compute unit (CU)-efficient implementations of all the mathematical functions required to utilize the Secp256k1 curve for arbitrary on-chain cryptographic operations. Most notably, scalar tweaking and elliptic curve (EC) multiplication now cost just 25,000 CUs, a 200x reduction from their initial ~5,000,000 CU cost. This library supports highly performant versions of:
 
 - Point compression
 - Point decompression

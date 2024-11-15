@@ -50,7 +50,7 @@ pub trait Secp256k1Point:
     /// Works the same way as Lift 𝑋 unchecked, additionally checking if the returned 𝑌-coordinate is on
     /// curve. Useful for situations where you already know that an 𝑋-coordinate is on curve, such as
     /// decompressing the public key that corresponds to a validated signature.
-    fn lift_x(x: &[u8; 32]) ->Result<Self, Secp256k1Error>;
+    fn lift_x(x: &[u8; 32]) -> Result<Self, Secp256k1Error>;
 
     /// ### Invert
     /// 

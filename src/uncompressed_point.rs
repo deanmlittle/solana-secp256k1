@@ -2,7 +2,10 @@ use core::{fmt::{Debug, Formatter}, ops::Add};
 
 use dashu::integer::UBig;
 use solana_nostd_secp256k1_recover::secp256k1_recover;
-use solana_program::big_mod_exp::big_mod_exp;
+
+#[cfg(feature="big-mod-exp")]
+use solana_nostd_big_mod_exp::big_mod_exp;
+
 
 use crate::{CompressedPoint, Curve, Secp256k1Error, Secp256k1Point};
 
@@ -42,6 +45,7 @@ impl Secp256k1Point for UncompressedPoint {
         ]
     }
 
+    #[cfg(feature="big-mod-exp")]
     fn lift_x(x: &[u8; 32]) -> Result<Self, Secp256k1Error> {
         // y^2 = x^3 + 7 mod P
         let x_3 = (&UBig::from_be_bytes(x).pow(3) + UBig::from_word(7)) % &UBig::from_be_bytes(&Curve::P);
@@ -56,6 +60,7 @@ impl Secp256k1Point for UncompressedPoint {
         Ok(Self(x_y))
     }
 
+    #[cfg(feature="big-mod-exp")]
     fn lift_x_unchecked(x: &[u8; 32]) -> Self {
         // We first compute y^2 = x^3 + 7 mod P
         let x_3 = (&UBig::from_be_bytes(x).pow(3) + UBig::from_word(7)) % &UBig::from_be_bytes(&Curve::P);
@@ -65,6 +70,16 @@ impl Secp256k1Point for UncompressedPoint {
         x_y[..32].clone_from_slice(x);
         x_y[32..].clone_from_slice(&y);
         Self(x_y)
+    }
+
+    #[cfg(not(feature="big-mod-exp"))]
+    fn lift_x(x: &[u8; 32]) -> Result<Self, Secp256k1Error> {
+        Curve::lift_x(x)
+    }
+
+    #[cfg(not(feature="big-mod-exp"))]
+    fn lift_x_unchecked(x: &[u8; 32]) -> Self {
+        Curve::lift_x_unchecked(x)
     }
 
     fn invert(&mut self) {
@@ -122,7 +137,7 @@ impl Add<UncompressedPoint> for UncompressedPoint {
         let y_q = UBig::from_be_bytes(&rhs.y());
 
         // Calculate modular inverse using big_mod_exp
-        let inv = Curve::mod_inv_p(&(&x_q - &x_p).to_be_bytes());
+        let inv = Curve::mod_inv_p(&(&x_q - &x_p).to_be_bytes()).expect("This shouldn't fail");
         let inv = UBig::from_be_bytes(&inv);
 
         // m = (y_q - y_p) * modinv(x_q - x_p, p)
@@ -247,12 +262,6 @@ impl TryFrom<CompressedPoint> for UncompressedPoint {
             point.invert();
         }
         Ok(point)
-    }
-}
-
-impl From<solana_program::secp256k1_recover::Secp256k1Pubkey> for UncompressedPoint {
-    fn from(p: solana_program::secp256k1_recover::Secp256k1Pubkey) -> Self {
-        UncompressedPoint(p.0)
     }
 }
 

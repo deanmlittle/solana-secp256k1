@@ -1,15 +1,10 @@
 use solana_nostd_secp256k1_recover::Secp256k1RecoverError;
-use thiserror::Error;
 
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Secp256k1Error {
-    #[error("The private key provided is invalid")]
     InvalidSecretKey,
-    #[error("The public key provided is invalid")]
     InvalidPublicKey,
-    #[error("Invalid Y coordinate")]
     InvalidYCoordinate,
-    #[error("Arithmetic overflow")]
     ArithmeticOverflow,
 }
 

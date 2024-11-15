@@ -1,6 +1,5 @@
-use dashu::integer::UBig;
+use dashu::integer::{fast_div::ConstDivisor, modular::IntoRing, UBig};
 use solana_nostd_secp256k1_recover::secp256k1_recover;
-use solana_program::big_mod_exp::big_mod_exp;
 
 use crate::*;
 pub struct Curve;
@@ -186,6 +185,76 @@ impl Curve {
         result
     }
 
+    /// ### Decompress Point
+    /// 
+    /// Decompresses a point by recovering it with parity
+    pub fn decompress(p: CompressedPoint) -> Result<UncompressedPoint, Secp256k1Error> {
+        let mut s = [0u8;64];
+        s[..32].clone_from_slice(&p.0[1..33]);
+        s[32..].clone_from_slice(&p.0[1..33]);
+        Ok(UncompressedPoint(secp256k1_recover(&[0u8; 32], false, &s)?))
+    }
+
+    /// ### Decompress Point Unchecked
+    /// 
+    /// Decompresses a point by recovering it with parity without checking it is on curve
+    pub fn decompress_unchecked(p: CompressedPoint) -> UncompressedPoint {
+        let mut s = [0u8;64];
+        s[..32].clone_from_slice(&p.0[1..33]);
+        s[32..].clone_from_slice(&p.0[1..33]);
+        UncompressedPoint(secp256k1_recover(&[0u8; 32], p.is_odd(), &s).expect("Point off curve"))
+    }
+
+    /// ### Lift X coordinate to curve
+    /// 
+    /// Lifts an X coordinate to curve and checks for a valid Y coordinate
+    pub fn lift_x(x: &[u8;32]) -> Result<UncompressedPoint, Secp256k1Error> {        
+        let p = UBig::from_be_bytes(&Curve::P);
+
+        // Calculate right side: x³ + 7
+        let x_3 = UBig::from_be_bytes(x).cubic() + UBig::from_word(7);
+        
+        let divisor = ConstDivisor::new(p.clone());
+        let exp = x_3.clone().into_ring(&divisor);
+        
+        // Calculate y = (x³ + 7)^((p+1)/4) mod p
+        let y = exp.pow(&(UBig::from_be_bytes(&Curve::P_1_4))).residue() % &p;
+
+        if y.sqr() % &p != x_3 % &p {
+            return Err(Secp256k1Error::InvalidYCoordinate);
+        }
+
+        let y_bytes = y.to_be_bytes();
+
+        let mut point = [0u8;64];
+        point[..32].clone_from_slice(x);
+        point[64 - y_bytes.len()..].clone_from_slice(&y_bytes);
+        Ok(UncompressedPoint(point))
+    }
+
+    /// ### Lift X coordinate to curve unchecked
+    /// 
+    /// Lifts an X coordinate to curve and checks for a valid Y coordinate
+    pub fn lift_x_unchecked(x: &[u8;32]) -> UncompressedPoint {        
+        let p = UBig::from_be_bytes(&Curve::P);
+
+        // Calculate right side: x³ + 7
+        let x_3 = UBig::from_be_bytes(x).cubic() + UBig::from_word(7);
+        
+        let divisor = ConstDivisor::new(p.clone());
+        let exp = x_3.into_ring(&divisor);
+        
+        // Calculate y = (x³ + 7)^((p+1)/4) mod p
+        let y = exp.pow(&(UBig::from_be_bytes(&Curve::P_1_4))).residue() % &p;
+
+        let y_bytes = y.to_be_bytes();
+
+        let mut point = [0u8;64];
+        point[..32].clone_from_slice(x);
+        point[64 - y_bytes.len()..].clone_from_slice(&y_bytes);
+        UncompressedPoint(point)
+    }
+
     /// # Fast Mod 𝑃
     /// 
     /// Taking advantage of the fact that:
@@ -274,9 +343,9 @@ impl Curve {
     /// 
     pub fn negate_n(k: &[u8; 32]) -> [u8;32] {
         let n = UBig::from_be_bytes(&Curve::N);
-        let x = ((n.clone() + n.clone() - UBig::from_be_bytes(k)) % n.clone()).to_be_bytes();
+        let x = ((&n + &n - UBig::from_be_bytes(k)) % &n).to_be_bytes();
         let mut r = [0u8;32];
-        r.clone_from_slice(&x);
+        r[32-x.len()..].clone_from_slice(&x);
         r
     }
 
@@ -333,10 +402,12 @@ impl Curve {
     /// let inv_k = Curve::mod_inv_n(&k);
     /// // `inv_k` now contains the value of (𝒌⁻¹) modulo 𝑁.
     /// ```
-    pub fn mod_inv_n(k: &[u8]) -> [u8; 32] {
+    pub fn mod_inv_n(k: &[u8]) -> Result<[u8; 32], Secp256k1Error> {
         let mut inv_k: [u8; 32] = [0u8; 32];
-        inv_k.clone_from_slice(&big_mod_exp(k, &Self::N_SUB_2, &Self::N)[..32]);
-        inv_k
+        let ring = ConstDivisor::new(UBig::from_be_bytes(&Self::N));
+        let res = ring.reduce(UBig::from_be_bytes(k)).inv().ok_or(Secp256k1Error::ArithmeticOverflow)?.residue().to_be_bytes();
+        inv_k[32-res.len()..].clone_from_slice(&res);
+        Ok(inv_k)
     }
 
     /// ### Modular Inverse 𝑃
@@ -363,10 +434,12 @@ impl Curve {
     /// let inv_k = Curve::mod_inv_p(&k);
     /// // `inv_k` now contains the value of (𝒌⁻¹) modulo 𝑃.
     /// ```
-    pub fn mod_inv_p(k: &[u8]) -> [u8; 32] {
+    pub fn mod_inv_p(k: &[u8]) -> Result<[u8; 32], Secp256k1Error> {
         let mut inv_k: [u8; 32] = [0u8; 32];
-        inv_k.clone_from_slice(&big_mod_exp(k, &Self::P_SUB_2, &Self::P)[..32]);
-        inv_k
+        let ring = ConstDivisor::new(UBig::from_be_bytes(&Self::P));
+        let res = ring.reduce(UBig::from_be_bytes(k)).inv().ok_or(Secp256k1Error::ArithmeticOverflow)?.residue().to_be_bytes();
+        inv_k[32-res.len()..].clone_from_slice(&res);
+        Ok(inv_k)
     }
 
     /// ### Mul 𝐺
