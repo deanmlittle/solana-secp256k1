@@ -352,7 +352,8 @@ impl Curve {
     pub fn negate_n_assign(k: &mut [u8; 32]) {
         let n = UBig::from_be_bytes(&Curve::N);
         let x = ((n.clone() + n.clone() - UBig::from_be_bytes(k)) % n.clone()).to_be_bytes();
-        k.clone_from_slice(&x);
+        k[..32-x.len()].clone_from_slice(&[0u8;32][..32-x.len()]);
+        k[32-x.len()..].clone_from_slice(&x);
     }
 
     pub fn negate_p(k: &[u8; 32]) -> [u8;32] {
@@ -366,7 +367,8 @@ impl Curve {
     pub fn negate_p_assign(k: &mut [u8; 32]) {
         let p = UBig::from_be_bytes(&Curve::P);
         let x = ((p.clone() + p.clone() - UBig::from_be_bytes(k)) % p.clone()).to_be_bytes();
-        k.clone_from_slice(&x);
+        k[..32-x.len()].clone_from_slice(&[0u8;32][..32-x.len()]);
+        k[32-x.len()..].clone_from_slice(&x);
     }
 
     // TODO: Check which is cheaper on CUs.
