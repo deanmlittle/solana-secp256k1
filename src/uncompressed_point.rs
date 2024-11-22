@@ -83,12 +83,9 @@ impl Secp256k1Point for UncompressedPoint {
     }
 
     fn invert(&mut self) {
-        let mut borrow = 0u8;
-        for i in (0..32).rev() {
-            let (res, b) = Curve::P[i].overflowing_sub(self.0[i + 32] + borrow);
-            self.0[i + 32] = res;
-            borrow = if b { 1 } else { 0 };
-        }
+        let y = (UBig::from_be_bytes(&Curve::P) - UBig::from_be_bytes(&self.y())).to_be_bytes();
+        self.0[32..64].clone_from_slice(&[0u8;32]);
+        self.0[64-y.len()..].clone_from_slice(&y);
     }
     
     fn compress(&self) -> CompressedPoint {
