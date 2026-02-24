@@ -1,6 +1,6 @@
 use core::{fmt::{Debug, Formatter}, ops::Add};
 
-use dashu::integer::UBig;
+use dashu::integer::{fast_div::ConstDivisor, UBig};
 use solana_nostd_secp256k1_recover::secp256k1_recover;
 
 #[cfg(feature="big-mod-exp")]
@@ -124,38 +124,39 @@ impl Add<UncompressedPoint> for UncompressedPoint {
     type Output = UncompressedPoint;
 
     fn add(self, rhs: UncompressedPoint) -> Self::Output {
-        let rhs: UncompressedPoint = rhs.decompress();
-        let p = UBig::from_be_bytes(&Curve::P); // The modulus
+        if self.y() == rhs.y() && self.x() == rhs.x() {
+            return self.double();
+        }
 
-        // Convert [u8; 32] to UBig
+        let p = UBig::from_be_bytes(&Curve::P);
+        let p2 = &p + &p;
+        let ring = ConstDivisor::new(p.clone());
+
         let x_p = UBig::from_be_bytes(&self.x());
         let y_p = UBig::from_be_bytes(&self.y());
         let x_q = UBig::from_be_bytes(&rhs.x());
         let y_q = UBig::from_be_bytes(&rhs.y());
 
-        // Calculate modular inverse using big_mod_exp
-        let inv = Curve::mod_inv_p(&(&x_q - &x_p).to_be_bytes()).expect("This shouldn't fail");
-        let inv = UBig::from_be_bytes(&inv);
+        // modinv(x_q - x_p, p) — computed directly without byte round-trip
+        let inv = ring.reduce(&x_q + &p - &x_p).inv().expect("Points are inverses");
+        let inv = inv.residue();
 
         // m = (y_q - y_p) * modinv(x_q - x_p, p)
         let m = (&y_q + &p - &y_p) * inv % &p;
 
-        // xr = m^2 - x_p - x_q
-        let xr = (&m * &m + &p - &x_p - &x_q) % &p;
+        // xr = m^2 - x_p - x_q (add 2p: x_p + x_q can be up to 2p-2)
+        let xr = (&m * &m + &p2 - &x_p - &x_q) % &p;
 
         // yr = m * (x_p - xr) - y_p
         let yr = (&m * (&x_p + &p - &xr) + &p - &y_p) % &p;
 
         // Convert results back to [u8; 32]
-        let mut result_x = [0u8; 32];
-        let mut result_y = [0u8; 32];
-        result_x.copy_from_slice(&xr.to_be_bytes());
-        result_y.copy_from_slice(&yr.to_be_bytes());
+        let xr_bytes = xr.to_be_bytes();
+        let yr_bytes = yr.to_be_bytes();
 
-        // Construct the result as a new UncompressedPoint
         let mut result = [0u8; 64];
-        result[..32].copy_from_slice(&result_x);
-        result[32..].copy_from_slice(&result_y);
+        result[32 - xr_bytes.len()..32].copy_from_slice(&xr_bytes);
+        result[64 - yr_bytes.len()..].copy_from_slice(&yr_bytes);
 
         UncompressedPoint(result)
     }

@@ -96,6 +96,15 @@ impl Curve {
         0xFB, 0x10, 0xD4, 0xB8,
     ]);
 
+    /// ### Scalar 2
+    ///
+    /// The scalar value 2, used for point doubling.
+    pub const TWO: [u8; 32] = [
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x02,
+    ];
+
     /// ### Add Mod Point 𝑁
     /// 
     /// Adds two scalars modulus curve order N.
@@ -192,7 +201,7 @@ impl Curve {
         let mut s = [0u8;64];
         s[..32].clone_from_slice(&p.0[1..33]);
         s[32..].clone_from_slice(&p.0[1..33]);
-        Ok(UncompressedPoint(secp256k1_recover(&[0u8; 32], false, &s)?))
+        Ok(UncompressedPoint(secp256k1_recover(&[0u8; 32], p.is_odd(), &s)?))
     }
 
     /// ### Decompress Point Unchecked
@@ -256,67 +265,27 @@ impl Curve {
     }
 
     /// # Fast Mod 𝑃
-    /// 
+    ///
     /// Taking advantage of the fact that:
     /// - This function is only used with 256-bit numbers
     /// - We will almost never need to mod 𝑃 as 𝑃 is very large
     /// - In the case that we do, we only need to handle the last 8 bytes.
-    /// 
-    /// We can optimize this beyond 
+    ///
+    /// Since P's first 24 bytes are all 0xFF, a >= P requires all of them
+    /// to be 0xFF and the last 8 bytes to be >= P's last 8 bytes.
     pub fn fast_mod_p(a: &mut [u8; 32]) {
-        // Transmute the &mut [u8; 32] into &mut [u64; 4]
-        let a_u64: &mut [u64; 4] = unsafe { std::mem::transmute(a) };
-    
-        if a_u64[0] < u64::MAX || a_u64[1] < u64::MAX || a_u64[2] < u64::MAX {
+        // Check if the first 24 bytes are all 0xFF
+        if a[..24] != [0xFF; 24] {
             return;
         }
-    
-        let max = 0xfffffffefffffc2f;
-        if a_u64[3] >= max {
-            a_u64[0] = 0;
-            a_u64[1] = 0;
-            a_u64[2] = 0;
-            a_u64[3] -= max;
+
+        let a3 = u64::from_be_bytes([a[24], a[25], a[26], a[27], a[28], a[29], a[30], a[31]]);
+        let p3: u64 = 0xFFFFFFFEFFFFFC2F;
+        if a3 >= p3 {
+            let remainder = a3 - p3;
+            a[..24].copy_from_slice(&[0u8; 24]);
+            a[24..].copy_from_slice(&remainder.to_be_bytes());
         }
-    }
-
-    /// # Fast Mod 𝑁
-    /// 
-    /// Taking advantage of the fact that:
-    /// - This function is only used with 256-bit numbers
-    /// - We will almost never need to mod 𝑁 as 𝑁 is very large
-    /// - In the case that we do, we only need to handle the last 33 bytes.
-    /// 
-    /// While this may not necessarily be faster in all cases, it will be faster 
-    /// on average to veto modulus by the first limb.
-    pub fn fast_mod_n(a: &mut [u8; 32]) {
-        // Transmute the &mut [u8; 32] into &mut [u64; 4]
-        let a_u64: &mut [u64; 4] = unsafe { std::mem::transmute(a) };
-    
-        // This will almost always be true. Skip to avoid allocating and comparing remaining limbs
-        if a_u64[0] < u64::MAX {
-            return
-        }
-
-        let n1 = u64::MAX-1;
-        let n2 = 0xbaaedce6af48a03bu64;
-        let n3 = 0xbfd25e8cd036413fu64;
-        
-        // This will also almost always be true, if not, we can directly set a_u64[0] to 0 and subtract the remaining limbs
-        if a_u64[1] < n1 && a_u64[2] < n2 && a_u64[3] < n3 {
-            return
-        }
-
-        // Subtraction with borrow propagation (from LSB to MSB)
-        let (new3, borrow3) = a_u64[3].overflowing_sub(n3);
-        let (new2, borrow2) = a_u64[2].overflowing_sub(n2 + borrow3 as u64);
-        let (new1, _) = a_u64[1].overflowing_sub(n1 + borrow2 as u64);
-
-        // Assign results back
-        a_u64[3] = new3;
-        a_u64[2] = new2;
-        a_u64[1] = new1;
-        a_u64[0] = 0;
     }
 
     /// ### Negate
@@ -360,7 +329,7 @@ impl Curve {
         let p = UBig::from_be_bytes(&Curve::P);
         let x = ((p.clone() + p.clone() - UBig::from_be_bytes(k)) % p.clone()).to_be_bytes();
         let mut r = [0u8;32];
-        r.clone_from_slice(&x);
+        r[32-x.len()..].clone_from_slice(&x);
         r
     }
 

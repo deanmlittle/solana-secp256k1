@@ -122,6 +122,26 @@ mod tests {
     }
 
     #[test]
+    fn ec_double() {
+        // G (pubkey of privkey 1)
+        let g2 = Curve::mul_g(&[0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]).unwrap();
+        let g4 = Curve::mul_g(&[0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]).unwrap();
+        // G + G should equal 2G
+        let result = g2 + g2;
+        assert_eq!(result, g4);
+    }
+
+    #[test]
+    fn ec_double_compressed() {
+        // G (pubkey of privkey 1)
+        let g2 = Curve::mul_g(&[0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02]).unwrap().compress();
+        let g4 = Curve::mul_g(&[0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04]).unwrap().compress();
+        // G + G should equal 2G
+        let result = (g2 + g2).compress();
+        assert_eq!(result, g4);
+    }
+
+    #[test]
     fn mod_add_n() {
         let a = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01];
         assert_eq!(Curve::add_mod_n(&a, &a), [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02]);
@@ -168,10 +188,110 @@ mod tests {
         let private_key_2 = [0xFB, 0xEB, 0x9D, 0x84, 0x0A, 0xF8, 0xA8, 0x64, 0xD1, 0xCB, 0x05, 0xAA, 0x6C, 0xC5, 0xB5, 0x4F, 0x52, 0xDF, 0x19, 0x50, 0xC6, 0x56, 0x1B, 0x76, 0x41, 0x10, 0xCA, 0x07, 0xC6, 0x98, 0x70, 0x58];
         let pubkey_1 = UncompressedPoint::try_from(private_key_1).unwrap();
         let pubkey_2 = UncompressedPoint::try_from(private_key_2).unwrap();
-        let pubkey_3 = Curve::ecmul(&pubkey_1, &private_key_2);        
+        let pubkey_3 = Curve::ecmul(&pubkey_1, &private_key_2);
         let pubkey_4 = Curve::ecmul(&pubkey_2, &private_key_1);
         assert_eq!(pubkey_3, pubkey_4);
     }
+
+    /// Generate deterministic pseudo-random scalars by repeatedly multiplying mod N.
+    fn generate_scalars(count: usize) -> Vec<[u8; 32]> {
+        let seed: [u8; 32] = [
+            0x4a, 0x2e, 0xb1, 0xc3, 0x98, 0x07, 0xd6, 0x5f, 0x43, 0x21, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45,
+            0x67, 0x89, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0x0f,
+        ];
+        let multiplier: [u8; 32] = [
+            0xd3, 0x7e, 0x12, 0xf9, 0x8a, 0x45, 0x6b, 0xc7, 0x01, 0xef, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde,
+            0xf0, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0x03,
+        ];
+        let mut scalars = Vec::with_capacity(count);
+        let mut current = seed;
+        for _ in 0..count {
+            scalars.push(current);
+            current = Curve::mul_mod_n(&current, &multiplier);
+        }
+        scalars
+    }
+
+    #[test]
+    fn ec_add_uncompressed_uncompressed() {
+        let scalars = generate_scalars(8);
+        for i in 0..scalars.len() {
+            for j in (i + 1)..scalars.len() {
+                let sum = Curve::add_mod_n(&scalars[i], &scalars[j]);
+                let expected = UncompressedPoint::try_from(sum).unwrap();
+                let a = UncompressedPoint::try_from(scalars[i]).unwrap();
+                let b = UncompressedPoint::try_from(scalars[j]).unwrap();
+                assert_eq!(a + b, expected, "Failed for scalars[{i}] + scalars[{j}]");
+            }
+        }
+    }
+
+    #[test]
+    fn ec_add_uncompressed_compressed() {
+        let scalars = generate_scalars(8);
+        for i in 0..scalars.len() {
+            for j in (i + 1)..scalars.len() {
+                let sum = Curve::add_mod_n(&scalars[i], &scalars[j]);
+                let expected = UncompressedPoint::try_from(sum).unwrap();
+                let a = UncompressedPoint::try_from(scalars[i]).unwrap();
+                let b = CompressedPoint::try_from(scalars[j]).unwrap();
+                assert_eq!(a + b, expected, "Failed for scalars[{i}] + scalars[{j}]");
+            }
+        }
+    }
+
+    #[test]
+    fn ec_add_compressed_uncompressed() {
+        let scalars = generate_scalars(8);
+        for i in 0..scalars.len() {
+            for j in (i + 1)..scalars.len() {
+                let sum = Curve::add_mod_n(&scalars[i], &scalars[j]);
+                let expected = UncompressedPoint::try_from(sum).unwrap();
+                let a = CompressedPoint::try_from(scalars[i]).unwrap();
+                let b = UncompressedPoint::try_from(scalars[j]).unwrap();
+                assert_eq!(a + b, expected, "Failed for scalars[{i}] + scalars[{j}]");
+            }
+        }
+    }
+
+    #[test]
+    fn ec_add_compressed_compressed() {
+        let scalars = generate_scalars(8);
+        for i in 0..scalars.len() {
+            for j in (i + 1)..scalars.len() {
+                let sum = Curve::add_mod_n(&scalars[i], &scalars[j]);
+                let expected = UncompressedPoint::try_from(sum).unwrap();
+                let a = CompressedPoint::try_from(scalars[i]).unwrap();
+                let b = CompressedPoint::try_from(scalars[j]).unwrap();
+                assert_eq!(a + b, expected, "Failed for scalars[{i}] + scalars[{j}]");
+            }
+        }
+    }
+
+    #[test]
+    fn ec_double_all_paths() {
+        let scalars = generate_scalars(8);
+        for (i, scalar) in scalars.iter().enumerate() {
+            let doubled_scalar = Curve::add_mod_n(scalar, scalar);
+            let expected = UncompressedPoint::try_from(doubled_scalar).unwrap();
+
+            let unc = UncompressedPoint::try_from(*scalar).unwrap();
+            let com = CompressedPoint::try_from(*scalar).unwrap();
+
+            // UncompressedPoint + UncompressedPoint (doubling)
+            assert_eq!(unc + unc, expected, "Uncompressed double failed for scalars[{i}]");
+            // CompressedPoint + CompressedPoint (doubling)
+            assert_eq!(com + com, expected, "Compressed double failed for scalars[{i}]");
+            // UncompressedPoint + CompressedPoint (doubling)
+            assert_eq!(unc + com, expected, "Uncompressed+Compressed double failed for scalars[{i}]");
+            // CompressedPoint + UncompressedPoint (doubling)
+            assert_eq!(com + unc, expected, "Compressed+Uncompressed double failed for scalars[{i}]");
+            // .double() trait method
+            assert_eq!(unc.double(), expected, "Uncompressed .double() failed for scalars[{i}]");
+            assert_eq!(com.double(), expected, "Compressed .double() failed for scalars[{i}]");
+        }
+    }
+
 }
 
 

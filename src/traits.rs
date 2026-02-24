@@ -67,5 +67,12 @@ pub trait Secp256k1Point:
     /// Decompress a point into an UncompressedPoint
     fn decompress(&self) -> UncompressedPoint;
 
+    /// ### Double
+    ///
+    /// Doubles a point by multiplying it by scalar 2.
+    fn double(&self) -> UncompressedPoint {
+        Curve::ecmul(self, &Curve::TWO).expect("Point doubling should not fail")
+    }
+
     fn tweak(&self, tweak: [u8; 32]) -> Result<Self, Secp256k1Error>;
 }

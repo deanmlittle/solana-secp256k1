@@ -105,8 +105,7 @@ impl Add for CompressedPoint {
     type Output = UncompressedPoint;
 
     fn add(self, point: Self) -> Self::Output {
-        let p = point.decompress();
-        p.add(point)
+        self.decompress().add(point.decompress())
     }
 }
 
