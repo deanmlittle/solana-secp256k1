@@ -3,7 +3,7 @@ name = "solana-secp256k1"
 authors = ["Dean Little <@deanmlittle>"]
 description = "Efficient, SVM-friendly implementations of common Secp256k1 functions"
 license = "MIT"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 
 [lib]
